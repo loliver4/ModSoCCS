@@ -1,0 +1,13 @@
+---
+title: "ModSoCCS Analysis analyses"
+author: "Lindsay Oliver"
+date: "`r Sys.Date()`"
+output: bookdown::gitbook
+github-repo: https://github.com/loliver4/ModSoCCS
+description: "Analysis of pre- and post- rTMS functional connectivity in SSDs"
+fontsize: 10pt
+monofontoptions: "Scale=0.5"
+classoption: landscape
+---
+
+# The index page

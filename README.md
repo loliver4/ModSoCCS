@@ -126,5 +126,5 @@ class DeconvolveOutputSpec(TraitedSpec):
     #    desc="automatical generated script to run 3dREMLfit", exists=True
     #)
 
- # outputs["reml_script"] = self._gen_fname(suffix=".REML_cmd", **_gen_fname_opts)
+And further down: #outputs["reml_script"] = self._gen_fname(suffix=".REML_cmd", **_gen_fname_opts)
 

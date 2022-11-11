@@ -64,4 +64,67 @@ sub-MRP0019/ses-01
 nan values in EA 1D regressor files occur when a participant's EA responses can't be correlated with the target's responses due to a lack of responding during the task. The GLM will not run successfully in this case. I updated nan values to 0 for these participants to allow the GLM to run successfully.
 
 
+Virtual environment notes:
+The nipype 3dDeconvolve interface doesn’t include some 3dDeconvolve options by default (AM2 option, polort A, xjpeg, residuals and full model), so the corresponding model.py script in the virtual env needed to be updated accordingly (the AM2 option in particular is needed for parametric modulation)
+Here, /projects/loliver/ModSoCCS/code/py_venv/lib/python3.8/site-packages/nipype/interfaces/afni/model.py
+It's probabyly easiest to copy or use this virtual env vs making these changes yourself if you are re-running this.
+
+polort A addition:
+polort_A = traits.Str(
+        desc="Set the polynomial order automatically " "[default: A]",
+        argstr="-polort %s",
+    )
+
+AM2 addition:
+num_stimts = traits.Int(
+        desc="number of stimulus timing files",
+        argstr="-num_stimts %d",
+        position=-6,
+    )
+ stim_times_AM2 = traits.List(
+        traits.Tuple(
+        traits.Int(desc="k-th R model"),         File(
+                 desc="stimulus timing file with different duration to class k"
+             ),
+             Str(desc="model"),
+         ),
+         desc="generate two resonpose models: one with th emean amplittude and one with the differences from the mean.",
+         argstr="-stim_times_AM2 %d %s '%s'...",
+         position=-6,
+     )
+
+Then need to change num_stimts position to -7
+
+Also need to change:
+stim_label = traits.List(
+        traits.Tuple(
+            traits.Int(desc="k-th input stimulus"), Str(desc="stimulus label")
+        ),
+        desc="label for kth input stimulus (e.g., Label1)",
+        argstr="-stim_label %d %s...",
+        requires=["stim_times", "stim_times_AM2"], ## THIS LINE RIGHT HERE
+        position=-4,
+    )
+
+xjpeg:
+xjpeg = File(
+        desc="specificy name for a JPEG file graphing the X matrix",
+        argstr="-xjpeg %s",
+    )
+
+residuals and full model:
+res_file = File(desc="output residual files", argstr="-errts %s")
+    full_model = File(
+        desc="output the (full model) time series fit to the input data",
+        argstr="-fitts %s",
+    )
+
+Also need to comment out REML outputs (different model type):
+class DeconvolveOutputSpec(TraitedSpec):
+    out_file = File(desc="output statistics file", exists=True)
+    #reml_script = File(
+    #    desc="automatical generated script to run 3dREMLfit", exists=True
+    #)
+
+ # outputs["reml_script"] = self._gen_fname(suffix=".REML_cmd", **_gen_fname_opts)
 

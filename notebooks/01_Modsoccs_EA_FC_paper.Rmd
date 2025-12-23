@@ -1,0 +1,1204 @@
+---
+title: "Modsoccs EA Connectivity"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r, message=FALSE, warning=FALSE, results=FALSE}
+library(splitstackshape)
+library(stringr)
+library(tidyr)
+library(dplyr)
+library(corrr)
+library(psych)
+library(tableone)
+library(corrplot)
+library(ggplot2)
+#library(effsize)
+
+```
+
+```{r, warning=FALSE, results=FALSE}
+# find ses 1 EA time series files  # pattern glob2rx("sub*_ses-01_EA_2mm_noGSR_individualized_rois_meants.csv")
+setwd("/projects/loliver/ModSoCCS/data/processed")
+files_ea_ts1 <- list.files(path= ".", recursive=T, full.names=F, pattern="^sub.*_ses-01_EA_2mm_noGSR_individualized_allrois_meants\\.csv$")
+
+# confirm csvs aren't empty
+files_ea_ts1[file.size(files_ea_ts1) == 0]
+
+# create list of IDs
+ptlist1 <- paste("SPN20", substring(files_ea_ts1,5,7), substring(files_ea_ts1,8,11), sep = "_")
+
+# read in time series files 
+ea_ts1 <- lapply(files_ea_ts1, read.csv, header=F)
+
+# transpose dfs
+ea_ts1 <- lapply(ea_ts1, t)
+
+# Name dfs with participant IDs
+names(ea_ts1) <- ptlist1
+
+# drop last 13 time points from each EA run for MRP and ZHP participants (not CMH) to align with CMH; not losing any task 
+for (i in names(ea_ts1[15:46])) {                 
+  ea_ts1[[i]] <- ea_ts1[[i]][c(1:690,704:1393),]
+}
+
+```
+
+```{r}
+# find circles onsets for each participant for ses 1 
+setwd("/projects/loliver/ModSoCCS/data/processed")
+
+# pattern glob2rx("sub*_circles.1D")
+files_circles <- list.files(path= ".", recursive=T, full.names=F, pattern="^sub.*_circles\\.1D$")
+
+# keep only ses-01
+files_circles1 <- str_subset(files_circles, pattern="ses-01")
+
+# create list of IDs
+circ_ptlist1 <- paste("SPN20", substring(files_circles1,5,7), substring(files_circles1,8,11), sep = "_")
+
+# read in circles files
+circles1 <- lapply(files_circles1, read.csv, header=F, sep=" ", colClasses=c(NA, NA, "NULL"))
+names(circles1) <- circ_ptlist1
+
+# get circles onset times into same row, adding 552 s per run (690 TRs/run), dividing by 0.8 (as TRs are 0.8s) to get TR onsets 
+circles_times1 <- list()
+
+for (i in names(circles1)) {
+  circles_times1[[i]] <- round(((cbind(circles1[[i]][1,],(circles1[[i]][2,])+552))/0.8))  
+}
+
+# remove circles from time series data (circles runs are 50 TRs or 40 s - this way we are removing 50 TRs - the onset + 49)
+ea_resid_ts1 <- list()
+
+for (i in names(ea_ts1)) {
+  ea_resid_ts1[[i]] <- ea_ts1[[i]][-c(circles_times1[[i]][1,1]:(circles_times1[[i]][1,1]+49),circles_times1[[i]][1,2]:(circles_times1[[i]][1,2]+49),
+                         circles_times1[[i]][1,3]:(circles_times1[[i]][1,3]+49),circles_times1[[i]][1,4]:(circles_times1[[i]][1,4]+49)),]
+}
+
+
+# check dims
+#lapply(ea_resid_ts1, dim)
+
+# check for NAs
+#for (i in names(ea_resid_ts1)) {
+#  print (i)
+#  print(which(is.na(ea_resid_ts1[[i]])))
+#}
+
+```
+
+```{r, warning=FALSE, results=FALSE}
+# find ses 2 EA time series files 
+setwd("/projects/loliver/ModSoCCS/data/processed")
+files_ea_ts2 <- list.files(path= ".", recursive=T, full.names=F, pattern="^sub.*_ses-02_EA_2mm_noGSR_individualized_allrois_meants\\.csv$")
+
+# confirm csvs aren't empty
+files_ea_ts2[file.size(files_ea_ts2) == 0]
+
+# create list of IDs
+ptlist2 <- paste("SPN20", substring(files_ea_ts2,5,7), substring(files_ea_ts2,8,11), sep = "_")
+
+# read in time series files 
+ea_ts2 <- lapply(files_ea_ts2, read.csv, header=F)
+
+# transpose dfs
+ea_ts2 <- lapply(ea_ts2, t)
+
+# Name dfs with participant IDs
+names(ea_ts2) <- ptlist2
+
+# drop last 13 time points from each EA run for MRP and ZHP participants (not CMH) to align with CMH; not losing any task 
+for (i in names(ea_ts2[15:46])) {                  
+  ea_ts2[[i]] <- ea_ts2[[i]][c(1:690,704:1393),]
+}
+
+# keep only those with both baseline and longitudinal data 
+#ea_ts2 <- ea_ts2[names(ea_ts2) %in% names(ea_ts1)]
+
+```
+
+```{r}
+# find circles onsets for each participant for ses 2 
+setwd("/projects/loliver/ModSoCCS/data/processed")
+
+# pattern glob2rx("sub*_circles.1D")
+files_circles <- list.files(path= ".", recursive=T, full.names=F, pattern="^sub.*_circles\\.1D$")
+
+# keep only ses-02
+files_circles2 <- str_subset(files_circles, pattern="ses-02")
+
+# create list of IDs
+circ_ptlist2 <- paste("SPN20", substring(files_circles2,5,7), substring(files_circles2,8,11), sep = "_")
+
+# read in circles files
+circles2 <- lapply(files_circles2, read.csv, header=F, sep=" ", colClasses=c(NA, NA, "NULL"))
+names(circles2) <- circ_ptlist2
+
+# get circles onset times into same row, adding 552 s per run (690 TRs/run), dividing by 0.8 (as TRs are 0.8s) to get TR onsets 
+circles_times2 <- list()
+
+for (i in names(circles2)) {
+  circles_times2[[i]] <- round(((cbind(circles2[[i]][1,],(circles2[[i]][2,])+552))/0.8))  
+}
+
+# remove circles from time series data (circles runs are 50 TRs or 40 s - this way we are removing 50 TRs - the onset + 49)
+ea_resid_ts2 <- list()
+
+for (i in names(ea_ts2)) {
+  ea_resid_ts2[[i]] <- ea_ts2[[i]][-c(circles_times2[[i]][1,1]:(circles_times2[[i]][1,1]+49),circles_times2[[i]][1,2]:(circles_times2[[i]][1,2]+49),
+                         circles_times2[[i]][1,3]:(circles_times2[[i]][1,3]+49),circles_times2[[i]][1,4]:(circles_times2[[i]][1,4]+49)),]
+}
+
+
+# check dims
+#lapply(ea_resid_ts2, dim)
+
+# check for NAs
+#for (i in names(ea_resid_ts2)) {
+#  print (i)
+#  print(which(is.na(ea_resid_ts2[[i]])))
+#}
+
+```
+
+```{r}
+# read in Modsoccs behavioural data 
+mod_data <- read.csv(file = "/projects/loliver/ModSoCCS/data/behavioural/ModSoCCS_data_09-10-2024.csv", header=T) %>%
+  mutate(site = as.factor(site),
+         demo_sex_birth = as.factor(demo_sex_birth),
+         scid5_cat3_scz = as.factor(scid5_cat3_scz)) 
+
+# change sex at birth to female for ZHP0002  (randomized before this info was recorded in Redcap)
+mod_data[mod_data$record_id=="SPN20_ZHP_0002","demo_sex_birth"] <- "female"
+
+# data for those who started treatment (N=49 vs N=46 completers) - ITT table
+mod_data_ITT <- mod_data[mod_data$term_premature_yn == 0 | mod_data$record_id=="SPN20_MRP_0014" | mod_data$record_id=="SPN20_ZHP_0009" | mod_data$record_id=="SPN20_ZHP_0026",]
+
+# filter based on early termination (keep completers only)
+mod_data <- mod_data[mod_data$term_premature_yn == 0,]
+
+# read in days between ea mris and days since final treatment
+mod_mri_data <- read.csv(file = "/projects/loliver/ModSoCCS/data/behavioural/ModSoCCS_data_03-01-2023_days_between_ea_treat.csv", header=T) 
+
+# add to mod_data
+mod_data <- merge(mod_data,mod_mri_data[,c(1,4:5)],by="record_id")
+
+# read in blinded groups 
+mod_gr_data <- read.csv(file = "/projects/loliver/ModSoCCS/data/behavioural/Modsoccs_group_labels_blinded.csv", header=T) 
+
+# add to mod_data
+mod_data <- merge(mod_data,mod_gr_data,by="record_id")
+mod_data$Label <- factor(mod_data$Label,  levels= c("A","B","C"), labels = c("Sham","rTMS","iTBS"))
+
+# add to mod_data_ITT
+mod_data_ITT <- merge(mod_data_ITT,mod_gr_data,by="record_id")
+mod_data_ITT$Label <- factor(mod_data_ITT$Label,  levels= c("A","B","C"), labels = c("Sham","rTMS","iTBS"))
+
+```
+
+```{r, warning=FALSE}
+# add mean EA to df
+mod_data_behav <- mod_data
+
+# find EA regressor files for ses 1 
+setwd("/projects/loliver/ModSoCCS/data/processed")
+
+# pattern glob2rx("sub*_circles.1D")
+files_ea <- list.files(path= ".", recursive=T, full.names=F, pattern="^.*_EA\\.1D$")
+
+# keep only ses-01
+files_ea1 <- str_subset(files_ea, pattern="ses-01")
+
+# create list of IDs
+ea_ptlist1 <- paste("SPN20", substring(files_ea1,5,7), substring(files_ea1,8,11), sep = "_")
+
+# read in ea regressor files
+ea1 <- lapply(files_ea1, read.csv, header=F, sep="*")
+ea1 <- lapply(ea1, cSplit, splitCols=2:4, sep=":")
+names(ea1) <- ea_ptlist1
+
+# calculate mean EA and add to spins_behav_conn
+mod_data_behav$pre_scog_mean_ea <- NA
+
+for (i in names(ea1)) {
+  mod_data_behav[mod_data_behav$record_id==i,"pre_scog_mean_ea"] <- mean(c(ea1[[i]][[1,"V2_1"]],ea1[[i]][[1,"V3_1"]],ea1[[i]][[1,"V4_1"]],
+    ea1[[i]][[2,"V2_1"]],ea1[[i]][[2,"V3_1"]],ea1[[i]][[2,"V4_1"]]), na.rm=T)
+}
+
+# fisher z transform EA values
+mod_data_behav$pre_scog_mean_ea <- fisherz(mod_data_behav$pre_scog_mean_ea)
+
+
+# same for ses 2 
+files_ea2 <- str_subset(files_ea, pattern="ses-02")
+
+# create list of IDs
+ea_ptlist2 <- paste("SPN20", substring(files_ea2,5,7), substring(files_ea2,8,11), sep = "_")
+
+# read in ea regressor files
+ea2 <- lapply(files_ea2, read.csv, header=F, sep="*")
+ea2 <- lapply(ea2, cSplit, splitCols=2:4, sep=":")
+names(ea2) <- ea_ptlist2
+
+# calculate mean EA and add to spins_behav_conn
+mod_data_behav$post_scog_mean_ea <- NA
+
+for (i in names(ea2)) {
+  mod_data_behav[mod_data_behav$record_id==i,"post_scog_mean_ea"] <- mean(c(ea2[[i]][[1,"V2_1"]],ea2[[i]][[1,"V3_1"]],ea2[[i]][[1,"V4_1"]],
+    ea2[[i]][[2,"V2_1"]],ea2[[i]][[2,"V3_1"]],ea2[[i]][[2,"V4_1"]]), na.rm=T)
+}
+
+# fisher z transform EA values
+mod_data_behav$post_scog_mean_ea <- fisherz(mod_data_behav$post_scog_mean_ea)
+
+```
+
+```{r}
+# examine changes in behavioural metrics
+# generate difference scores 
+mod_data_behav$diff_scog_er40_cr_columnpcr_value <- mod_data_behav$post_scog_er40_cr_columnpcr_value-mod_data_behav$pre_scog_er40_cr_columnpcr_value
+
+mod_data_behav$diff_scog_rmet_total <- mod_data_behav$post_scog_rmet_total-mod_data_behav$pre_scog_rmet_total
+
+mod_data_behav$diff_scog_tasit_p1_total <- mod_data_behav$post_scog_tasit_p1_total-mod_data_behav$pre_scog_tasit_p1_total
+
+mod_data_behav$diff_scog_tasit_p2_sin <- mod_data_behav$post_scog_tasit_p2_sin-mod_data_behav$pre_scog_tasit_p2_sin
+mod_data_behav$diff_scog_tasit_p2_sscar <- mod_data_behav$post_scog_tasit_p2_sscar-mod_data_behav$pre_scog_tasit_p2_sscar
+mod_data_behav$diff_scog_tasit_p2_psar <- mod_data_behav$post_scog_tasit_p2_psar-mod_data_behav$pre_scog_tasit_p2_psar
+
+mod_data_behav$diff_scog_tasit_p3_lie <- mod_data_behav$post_scog_tasit_p3_lie-mod_data_behav$pre_scog_tasit_p3_lie
+mod_data_behav$diff_scog_tasit_p3_sar <- mod_data_behav$post_scog_tasit_p3_sar-mod_data_behav$pre_scog_tasit_p3_sar
+
+mod_data_behav$diff_scog_mean_ea <- mod_data_behav$post_scog_mean_ea-mod_data_behav$pre_scog_mean_ea
+
+mod_data_behav$diff_np_domain_process_speed <- mod_data_behav$post_np_domain_tscore_process_speed-mod_data_behav$pre_np_domain_tscore_process_speed
+mod_data_behav$diff_np_domain_work_mem <- mod_data_behav$post_np_domain_tscore_work_mem-mod_data_behav$pre_np_domain_tscore_work_mem
+mod_data_behav$diff_np_domain_verbal_learning <- mod_data_behav$post_np_domain_tscore_verbal_learning-mod_data_behav$pre_np_domain_tscore_verbal_learning
+
+```
+
+```{r}
+# examine changes in clinical metrics
+# generate difference scores 
+mod_data_behav$diff_bprs_total <- mod_data_behav$tx10_bprs_factor_total-mod_data_behav$pre_bprs_factor_total
+
+mod_data_behav$diff_cdss_total <- mod_data_behav$tx10_cdss_total-mod_data_behav$pre_cdss_total
+mod_data_behav$diff_cdss_depLV1 <- (mod_data_behav$tx10_cdss_001  + mod_data_behav$tx10_cdss_002 + mod_data_behav$tx10_cdss_003 + mod_data_behav$tx10_cdss_006 + 
+                                    mod_data_behav$tx10_cdss_008) -  (mod_data_behav$pre_cdss_001 + mod_data_behav$pre_cdss_002 + mod_data_behav$pre_cdss_003 +
+                                    mod_data_behav$pre_cdss_006 + mod_data_behav$pre_cdss_008)
+
+mod_data_behav$diff_sans_total <- mod_data_behav$post_sans_total_sc-mod_data_behav$pre_sans_total_sc
+
+```
+
+```{r}
+# exclude CMH0001 for EA metrics - didn't engage in EA task # Sham
+mod_data_behav[mod_data_behav$record_id=="SPN20_CMH_0001",c("pre_scog_mean_ea","post_scog_mean_ea","diff_scog_mean_ea")] <- NA
+
+# look at NAs per diff measure
+summary(mod_data_behav[,c(234,237:249,252,250)])
+
+```
+
+```{r, fig.height=9, fig.width=11}
+# check out distributions and check for outliers  
+library(reshape2)
+
+summary(mod_data_behav)
+
+# melt data
+mod_data_behav_melt <- melt(mod_data_behav[,c(1,234,237:252)])
+
+# plots
+ggplot(data = mod_data_behav_melt, mapping = aes(x = value)) + 
+  geom_histogram(bins = 10) + facet_wrap(~variable, scales = 'free_x')
+
+# shapiro-wilks 
+sapply(mod_data_behav[,c(237:252)], shapiro.test)
+
+```
+
+```{r}
+# check for outliers 
+outfunc <- function(x) {abs(scale(x)) > 3}
+
+outlist_behav <- list()
+
+for (i in colnames(mod_data_behav[,c(237:252)])) {
+  outlist_behav[[i]] <-
+    as.vector(mod_data_behav[which(outfunc(mod_data_behav[[i]])),1])
+} # 1 to see IDs; i to see values
+
+print(outlist_behav)
+
+# remove outliers with 3 SD criteria - leave in as using non-parametric tests and these scores still seem reasonable/possible
+
+#for (i in names(outlist_behav)) {
+#  mod_data_behav[mod_data_behav$record_id %in% outlist_behav[[i]], i] <- NA
+#}
+
+```
+
+```{r, fig.height=9, fig.width=11}
+# check out distributions after outlier removal (if remove)
+
+# melt data
+mod_data_behav_melt <- melt(mod_data_behav[,c(1,234,237:252)])
+
+# plots
+ggplot(data = mod_data_behav_melt, mapping = aes(x = value)) + 
+  geom_histogram(bins = 10) + facet_wrap(~variable, scales = 'free_x')
+
+# shapiro-wilks 
+sapply(mod_data_behav[,c(237:252)], shapiro.test)
+
+```
+
+```{r, fig.height=9, fig.width=11}
+# check out T1 distributions 
+
+# melt data
+mod_data_behav_times_melt <- melt(mod_data_behav[,c(1,10,125,124,138:141,147:148,235,121:123,107,90,105,100,112)])
+
+# plots
+ggplot(data = mod_data_behav_times_melt, mapping = aes(x = value)) + 
+  geom_histogram(bins = 10) + facet_wrap(~variable, scales = 'free_x')
+
+# shapiro-wilks 
+sapply(mod_data_behav[,c(10,125,124,138:141,147:148,235,121:123,107,90,105,100,112)], shapiro.test)
+
+```
+
+```{r}
+# table to look at baseline behav diffs - Sham N=16, rTMS N=15, iTBS N=15 
+table_one_beh <- CreateTableOne(strata="Label", testNonNormal = kruskal.test, data=mod_data_behav[,c(234,6,10,125,124,138:141,147:148,235,121:123,107,90,105,100,112)]) 
+table_one_beh_print <- print(table_one_beh)
+
+#write.csv(table_one_beh_print,file="/projects/loliver/ModSoCCS/results/modsoccs_table_beh_base_kw_09-07-2025.csv")
+
+```
+
+```{r}
+# table to look at pre-post behav diffs - Sham N=16, rTMS N=15, iTBS N=15 
+table_one_beh_diff <- CreateTableOne(strata="Label", testNonNormal = kruskal.test, data=mod_data_behav[,c(234,237:249,252,250)])
+table_one_beh_diff_print <- print(table_one_beh_diff)
+
+#write.csv(table_one_beh_diff_print,file="/projects/loliver/ModSoCCS/results/modsoccs_table_beh_diff_kw_09-07-2025.csv")
+
+```
+
+```{r}
+# table to look at post behav diffs - Sham N=16, rTMS N=15, iTBS N=15 
+table_one_beh_post <- CreateTableOne(strata="Label", testNonNormal = kruskal.test, data=mod_data_behav[,c(234,6,10,203,202,216:219,225:226,236,199:201,175,190,185)]) 
+table_one_beh_post_print <- print(table_one_beh_post)
+
+#write.csv(table_one_beh_post_print,file="/projects/loliver/ModSoCCS/results/modsoccs_table_beh_post_kw_09-07-2025.csv")
+
+```
+
+```{r Exploratory analyses behaviour}
+# exploratory analyses - linear models 
+for (i in colnames(mod_data_behav[,237:252])) {
+  print(i)
+  assign(paste0("lm_",i), lm(get(i) ~ Label, 
+  data = mod_data_behav)) %>% summary() %>% print()
+}
+
+# with covariates
+for (i in colnames(mod_data_behav[,237:252])) {
+  print(i)
+  assign(paste0("lmcov_",i), lm(get(i) ~ Label + demo_sex_birth + demo_age_study_entry + site,  
+  data = mod_data_behav)) %>% summary() %>% print()
+}
+
+```
+
+```{r}
+# set up for treatment group comparisons
+mod_data_ShamTBS <- mod_data_behav[mod_data_behav$Label!="rTMS",]
+mod_data_ShamTBS$Label <- factor(mod_data_ShamTBS$Label, levels=c("iTBS","Sham"))
+
+mod_data_ShamTMS <- mod_data_behav[mod_data_behav$Label!="iTBS",]
+mod_data_ShamTMS$Label <- factor(mod_data_ShamTMS$Label, levels=c("rTMS","Sham"))
+
+mod_data_TBSTMS <- mod_data_behav[mod_data_behav$Label!="Sham",]
+mod_data_TBSTMS$Label <- factor(mod_data_TBSTMS$Label, levels=c("iTBS","rTMS"))
+
+```
+
+```{r}
+# effect sizes
+library(effsize)
+
+# ER40 
+cliff.delta(mod_data_ShamTBS$diff_scog_er40_cr_columnpcr_value, mod_data_ShamTBS$Label, na.rm=T)
+cliff.delta(mod_data_ShamTMS$diff_scog_er40_cr_columnpcr_value, mod_data_ShamTMS$Label, na.rm=T)
+
+# RMET
+cliff.delta(mod_data_ShamTBS$diff_scog_rmet_total, mod_data_ShamTBS$Label)
+cliff.delta(mod_data_ShamTMS$diff_scog_rmet_total, mod_data_ShamTMS$Label)
+
+# TASIT 1
+cliff.delta(mod_data_ShamTBS$diff_scog_tasit_p1_total, mod_data_ShamTBS$Label)
+cliff.delta(mod_data_ShamTMS$diff_scog_tasit_p1_total, mod_data_ShamTMS$Label)
+
+# TASIT 2 
+cliff.delta(mod_data_ShamTBS$diff_scog_tasit_p2_sin, mod_data_ShamTBS$Label)
+cliff.delta(mod_data_ShamTMS$diff_scog_tasit_p2_sin, mod_data_ShamTMS$Label)
+
+cliff.delta(mod_data_ShamTBS$diff_scog_tasit_p2_sscar, mod_data_ShamTBS$Label)
+cliff.delta(mod_data_ShamTMS$diff_scog_tasit_p2_sscar, mod_data_ShamTMS$Label)
+
+cliff.delta(mod_data_ShamTBS$diff_scog_tasit_p2_psar, mod_data_ShamTBS$Label)
+cliff.delta(mod_data_ShamTMS$diff_scog_tasit_p2_psar, mod_data_ShamTMS$Label)
+
+# TASIT 3
+cliff.delta(mod_data_ShamTBS$diff_scog_tasit_p3_lie, mod_data_ShamTBS$Label)
+cliff.delta(mod_data_ShamTMS$diff_scog_tasit_p3_lie, mod_data_ShamTMS$Label)
+
+cliff.delta(mod_data_ShamTBS$diff_scog_tasit_p3_sar, mod_data_ShamTBS$Label)
+cliff.delta(mod_data_ShamTMS$diff_scog_tasit_p3_sar, mod_data_ShamTMS$Label)
+
+# mean EA
+cliff.delta(mod_data_ShamTBS$diff_scog_mean_ea, mod_data_ShamTBS$Label, na.rm=T)
+cliff.delta(mod_data_ShamTMS$diff_scog_mean_ea, mod_data_ShamTMS$Label, na.rm=T)
+
+# processing speed
+cliff.delta(mod_data_ShamTBS$diff_np_domain_process_speed, mod_data_ShamTBS$Label)
+cliff.delta(mod_data_ShamTMS$diff_np_domain_process_speed, mod_data_ShamTMS$Label)
+
+# working mem
+cliff.delta(mod_data_ShamTBS$diff_np_domain_work_mem, mod_data_ShamTBS$Label)
+cliff.delta(mod_data_ShamTMS$diff_np_domain_work_mem, mod_data_ShamTMS$Label)
+
+# verbal learning
+cliff.delta(mod_data_ShamTBS$diff_np_domain_verbal_learning, mod_data_ShamTBS$Label)
+cliff.delta(mod_data_ShamTMS$diff_np_domain_verbal_learning, mod_data_ShamTMS$Label)
+
+# BPRS total 
+cliff.delta(mod_data_ShamTBS$diff_bprs_total, mod_data_ShamTBS$Label, na.rm=T)
+cliff.delta(mod_data_ShamTMS$diff_bprs_total, mod_data_ShamTMS$Label, na.rm=T)
+
+# CDSS total 
+cliff.delta(mod_data_ShamTBS$diff_cdss_total, mod_data_ShamTBS$Label)
+cliff.delta(mod_data_ShamTMS$diff_cdss_total, mod_data_ShamTMS$Label)
+
+# SANS total
+cliff.delta(mod_data_ShamTBS$diff_sans_total, mod_data_ShamTBS$Label)
+cliff.delta(mod_data_ShamTMS$diff_sans_total, mod_data_ShamTMS$Label)
+
+```
+
+```{r Exploratory behavioural box plots, fig.height=5, fig.width=6}
+# box plots
+ggplot(mod_data_behav,aes(x=Label,y=diff_scog_er40_cr_columnpcr_value,fill=Label)) + 
+  geom_boxplot()+ scale_fill_brewer(palette="BuPu") +
+  geom_jitter(size=1.2,alpha=0.5) + #aes(colour = Label), 
+  geom_point(shape = 21)+
+  ggtitle("ER40 Change by Treatment Group") +
+  ylab("Post-Pre ER40") +
+  xlab("Treatment Group")
+
+ggplot(mod_data_behav,aes(x=Label,y=diff_scog_rmet_total,fill=Label)) + 
+  geom_boxplot()+ scale_fill_brewer(palette="BuPu") +
+  geom_jitter(size=1.2,alpha=0.5) + #aes(colour = Label), 
+  geom_point(shape = 21)+
+  ggtitle("RMET Change by Treatment Group") +
+  ylab("Post-Pre RMET") +
+  xlab("Treatment Group")
+
+ggplot(mod_data_behav,aes(x=Label,y=diff_scog_tasit_p1_total,fill=Label)) + 
+  geom_boxplot()+ scale_fill_brewer(palette="BuPu") +
+  geom_jitter(size=1.2,alpha=0.5) + #aes(colour = Label), 
+  geom_point(shape = 21)+
+  ggtitle("TASIT 1 Change by Treatment Group") +
+  ylab("Post-Pre TASIT 1") +
+  xlab("Treatment Group")
+
+ggplot(mod_data_behav,aes(x=Label,y=diff_scog_tasit_p2_sscar,fill=Label)) + 
+  geom_boxplot()+ scale_fill_brewer(palette="BuPu") +
+  geom_jitter(size=1.2,alpha=0.5) + #aes(colour = Label), 
+  geom_point(shape = 21)+
+  ggtitle("TASIT 2 Simple Sarcasm Change by Treatment Group") +
+  ylab("Post-Pre TASIT 2") +
+  xlab("Treatment Group")
+
+ggplot(mod_data_behav,aes(x=Label,y=diff_scog_tasit_p3_lie,fill=Label)) + 
+  geom_boxplot()+ scale_fill_brewer(palette="BuPu") +
+  geom_jitter(size=1.2,alpha=0.5) + #aes(colour = Label), 
+  geom_point(shape = 21)+
+  ggtitle("TASIT 3 Lies Change by Treatment Group") +
+  ylab("Post-Pre TASIT 3") +
+  xlab("Treatment Group")
+
+ggplot(mod_data_behav,aes(x=Label,y=diff_scog_tasit_p3_sar,fill=Label)) + 
+  geom_boxplot()+ scale_fill_brewer(palette="BuPu") +
+  geom_jitter(size=1.2,alpha=0.5) + #aes(colour = Label), 
+  geom_point(shape = 21)+
+  ggtitle("TASIT 3 Sarcasm Change by Treatment Group") +
+  ylab("Post-Pre TASIT 3") +
+  xlab("Treatment Group")
+
+ggplot(mod_data_behav,aes(x=Label,y=diff_np_domain_verbal_learning,fill=Label)) + 
+  geom_boxplot()+ scale_fill_brewer(palette="BuPu") +
+  geom_jitter(size=1.2,alpha=0.5) + #aes(colour = Label), 
+  geom_point(shape = 21)+
+  ggtitle("Verbal Learning Change by Treatment Group") +
+  ylab("Post-Pre Verbal Learning") +
+  xlab("Treatment Group")
+
+ggplot(mod_data_behav,aes(x=Label,y=diff_bprs_total,fill=Label)) + 
+  geom_boxplot()+ scale_fill_brewer(palette="BuPu") +
+  geom_jitter(size=1.2,alpha=0.5) + #aes(colour = Label), 
+  geom_point(shape = 21)+
+  ggtitle("BPRS Total Change by Treatment Group") +
+  ylab("Post-Pre BPRS Total") +
+  xlab("Treatment Group")
+
+ggplot(mod_data_behav,aes(x=Label,y=diff_cdss_total,fill=Label)) + 
+  geom_boxplot()+ scale_fill_brewer(palette="BuPu") +
+  geom_jitter(size=1.2,alpha=0.5) + #aes(colour = Label), 
+  geom_point(shape = 21)+
+  ggtitle("CDSS Total Change by Treatment Group") +
+  ylab("Post-Pre CDSS Total") +
+  xlab("Treatment Group")
+
+ggplot(mod_data_behav,aes(x=Label,y=diff_cdss_depLV1,fill=Label)) + 
+  geom_boxplot()+ scale_fill_brewer(palette="BuPu") +
+  geom_jitter(size=1.2,alpha=0.5) + #aes(colour = Label), 
+  geom_point(shape = 21)+
+  ggtitle("CDSS Dep LV1 Change by Treatment Group") +
+  ylab("Post-Pre CDSS Dep LV1") +
+  xlab("Treatment Group")
+
+ggplot(mod_data_behav,aes(x=Label,y=diff_sans_total,fill=Label)) + 
+  geom_boxplot()+ scale_fill_brewer(palette="BuPu") +
+  geom_jitter(size=1.2,alpha=0.5) + #aes(colour = Label), 
+  geom_point(shape = 21)+
+  ggtitle("SANS Total Change by Treatment Group") +
+  ylab("Post-Pre SANS Total") +
+  xlab("Treatment Group")
+
+```
+
+```{r}
+# change behav data to long format for line plots
+mod_behav_long1 <- mod_data_behav[,c(1,2,234,85:105,115:133,136:153,235)]
+mod_behav_long1$time <- rep("t1",nrow(mod_data_behav))
+colnames(mod_behav_long1)[4:62] <- sub("pre_", "", colnames(mod_behav_long1)[4:62])
+
+mod_behav_long2 <- mod_data_behav[,c(1,2,234,170:190,193:211,214:231,236)]
+mod_behav_long2$time <- rep("t2",nrow(mod_data_behav))
+colnames(mod_behav_long2)[4:19] <- sub("tx10_", "", colnames(mod_behav_long2)[4:19])
+colnames(mod_behav_long2)[20:62] <- sub("post_", "", colnames(mod_behav_long2)[20:62])
+
+mod_behav_long <- rbind(mod_behav_long1, mod_behav_long2)
+
+```
+
+```{r fig.height=4, fig.width=7}
+# line plots behav x time  
+ggplot(mod_behav_long, aes(x=time, y=scog_er40_cr_columnpcr_value, colour=Label)) +    
+  geom_point(aes(colour=Label)) +    # aes(shape = PlotLabel)
+  geom_line(aes(group=record_id), alpha = 0.5) +   # color=Label #color=rep(ment_conn_diff$colour,2)
+  stat_smooth(aes(group = Label, colour=Label), method = "lm", se = TRUE, fill = "lightgrey", alpha = 0.6, size=1) +
+  stat_summary(aes(group = Label, colour=Label), geom = "point", fun = mean) + 
+  labs(x ="Time", 
+       y = "ER40 Total") +
+  guides(fill=FALSE, color=FALSE) +
+  facet_wrap(~Label) +
+  scale_x_discrete(expand=c(0.1, 0.1)) +  # add space between time points
+  theme_bw() +
+  theme(strip.background = element_rect(fill="white")) +
+  theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank(),text=element_text(size=15))
+
+ggplot(mod_behav_long, aes(x=time, y=scog_rmet_total, colour=Label)) +    #record_id
+  geom_point(aes(colour=Label)) +    # aes(shape = PlotLabel)
+  geom_line(aes(group=record_id), alpha = 0.5) +   # color=Label #color=rep(ment_conn_diff$colour,2)
+  stat_smooth(aes(group = Label, colour=Label), method = "lm", se = TRUE, fill = "lightgrey", alpha = 0.6, size=1) +
+  stat_summary(aes(group = Label, colour=Label), geom = "point", fun = mean) + 
+  labs(x ="Time", 
+       y = "RMET Total") +
+  guides(fill=FALSE, color=FALSE) +
+  facet_wrap(~Label) +
+  scale_x_discrete(expand=c(0.1, 0.1)) +  # add space between time points
+  theme_bw() +
+  theme(strip.background = element_rect(fill="white")) +
+  theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank(),text=element_text(size=15))
+
+ggplot(mod_behav_long, aes(x=time, y=scog_mean_ea, colour=Label)) +    #record_id
+  geom_point(aes(colour=Label)) +    # aes(shape = PlotLabel)
+  geom_line(aes(group=record_id), alpha = 0.5) +   # color=Label #color=rep(ment_conn_diff$colour,2)
+  stat_smooth(aes(group = Label, colour=Label), method = "lm", se = TRUE, fill = "lightgrey", alpha = 0.6, size=1) +
+  stat_summary(aes(group = Label, colour=Label), geom = "point", fun = mean) + 
+  labs(x ="Time", 
+       y = "Mean EA") +
+  guides(fill=FALSE, color=FALSE) +
+  facet_wrap(~Label) +
+  scale_x_discrete(expand=c(0.1, 0.1)) +  # add space between time points
+  theme_bw() +
+  theme(strip.background = element_rect(fill="white")) +
+  theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank(),text=element_text(size=15))
+
+ggplot(mod_behav_long, aes(x=time, y=scog_tasit_p3_sar, colour=Label)) +    #record_id
+  geom_point(aes(colour=Label)) +    # aes(shape = PlotLabel)
+  geom_line(aes(group=record_id), alpha = 0.5) +   # color=Label #color=rep(ment_conn_diff$colour,2)
+  stat_smooth(aes(group = Label, colour=Label), method = "lm", se = TRUE, fill = "lightgrey", alpha = 0.6, size=1) +
+  stat_summary(aes(group = Label, colour=Label), geom = "point", fun = mean) + 
+  labs(x ="Time", 
+       y = "TASIT 3 Sarcasm") +
+  guides(fill=FALSE, color=FALSE) +
+  facet_wrap(~Label) +
+  scale_x_discrete(expand=c(0.1, 0.1)) +  # add space between time points
+  theme_bw() +
+  theme(strip.background = element_rect(fill="white")) +
+  theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank(),text=element_text(size=15))
+
+ggplot(mod_behav_long, aes(x=time, y=np_domain_tscore_verbal_learning, colour=Label)) +    #record_id
+  geom_point(aes(colour=Label)) +    # aes(shape = PlotLabel)
+  geom_line(aes(group=record_id), alpha = 0.5) +   # color=Label #color=rep(ment_conn_diff$colour,2)
+  stat_smooth(aes(group = Label, colour=Label), method = "lm", se = TRUE, fill = "lightgrey", alpha = 0.6, size=1) +
+  stat_summary(aes(group = Label, colour=Label), geom = "point", fun = mean) + 
+  labs(x ="Time", 
+       y = "Verbal Learning") +
+  guides(fill=FALSE, color=FALSE) +
+  facet_wrap(~Label) +
+  scale_x_discrete(expand=c(0.1, 0.1)) +  # add space between time points
+  theme_bw() +
+  theme(strip.background = element_rect(fill="white")) +
+  theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank(),text=element_text(size=15))
+
+ggplot(mod_behav_long, aes(x=time, y=bprs_factor_total, colour=Label)) +    #record_id
+  geom_point(aes(colour=Label)) +    # aes(shape = PlotLabel)
+  geom_line(aes(group=record_id), alpha = 0.5) +   # color=Label #color=rep(ment_conn_diff$colour,2)
+  stat_smooth(aes(group = Label, colour=Label), method = "lm", se = TRUE, fill = "lightgrey", alpha = 0.6, size=1) +
+  stat_summary(aes(group = Label, colour=Label), geom = "point", fun = mean) + 
+  labs(x ="Time", 
+       y = "BPRS Total") +
+  guides(fill=FALSE, color=FALSE) +
+  facet_wrap(~Label) +
+  scale_x_discrete(expand=c(0.1, 0.1)) +  # add space between time points
+  theme_bw() +
+  theme(strip.background = element_rect(fill="white")) +
+  theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank(),text=element_text(size=15))
+
+ggplot(mod_behav_long, aes(x=time, y=sans_total_sc, colour=Label)) +    #record_id
+  geom_point(aes(colour=Label)) +    # aes(shape = PlotLabel)
+  geom_line(aes(group=record_id), alpha = 0.5) +   # color=Label #color=rep(ment_conn_diff$colour,2)
+  stat_smooth(aes(group = Label, colour=Label), method = "lm", se = TRUE, fill = "lightgrey", alpha = 0.6, size=1) +
+  stat_summary(aes(group = Label, colour=Label), geom = "point", fun = mean) + 
+  labs(x ="Time", 
+       y = "SANS Total") +
+  guides(fill=FALSE, color=FALSE) +
+  facet_wrap(~Label) +
+  scale_x_discrete(expand=c(0.1, 0.1)) +  # add space between time points
+  theme_bw() +
+  theme(strip.background = element_rect(fill="white")) +
+  theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank(),text=element_text(size=15))
+
+ggplot(mod_behav_long, aes(x=time, y=cdss_total, colour=Label)) +    #record_id
+  geom_point(aes(colour=Label)) +    # aes(shape = PlotLabel)
+  geom_line(aes(group=record_id), alpha = 0.5) +   # color=Label #color=rep(ment_conn_diff$colour,2)
+  stat_smooth(aes(group = Label, colour=Label), method = "lm", se = TRUE, fill = "lightgrey", alpha = 0.6, size=1) +
+  stat_summary(aes(group = Label, colour=Label), geom = "point", fun = mean) + 
+  labs(x ="Time", 
+       y = "CDSS Total") +
+  guides(fill=FALSE, color=FALSE) +
+  facet_wrap(~Label) +
+  scale_x_discrete(expand=c(0.1, 0.1)) +  # add space between time points
+  theme_bw() +
+  theme(strip.background = element_rect(fill="white")) +
+  theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank(),text=element_text(size=15))
+
+```
+
+```{r}
+# sensitivity analyses 
+# excluding those with 17 days since last treatment 
+#mod_data_behav <- mod_data_behav[mod_data_behav$days_since_treat!=17,] # SPN20_CMH_0012 and SPN20_MRP_0010 
+
+# excluding CMH0001 as didn't engage in EA task
+#mod_data_behav <- mod_data_behav[mod_data_behav$record_id!="SPN20_CMH_0001",] 
+
+# excluding those with mean FD in either session > 0.5 
+#mod_data_behav <- mod_data_behav[!(mod_data_behav$record_id %in% c("SPN20_CMH_0003","SPN20_MRP_0002","SPN20_ZHP_0002")),] # N=40 - Sham N=11, rTMS N=14, iTBS N=15
+
+```
+
+```{r}
+# make roi list
+rois <- c("dmpfc","precuneus","left_tpj","right_tpj","left_premotor","right_premotor","left_ips","right_ips")
+
+# generate ses 01 correlation matrices for each participant
+cor_ea1  <- lapply(ea_resid_ts1, cor)
+
+# fisher z transform corrs to normalize dist
+cor_ea1_z  <- lapply(cor_ea1, fisherz)
+
+# add ROI names and replace inf values with 0 
+for (i in names(cor_ea1_z)) {
+  colnames(cor_ea1_z[[i]]) <- as.vector(rois)
+  rownames(cor_ea1_z[[i]]) <- as.vector(rois)
+  cor_ea1_z[[i]][is.infinite(cor_ea1_z[[i]])] <- 0
+}
+
+
+# generate df with dmpfc to other ROIs, and mean within network conn for each participant (across the four ROIs)
+ment_conn1 <- data.frame()
+for (i in names(cor_ea1_z)) {
+  ment_conn1[i,"pre_dmpfc_precuneus"] <- cor_ea1_z[[i]][1,2]
+  ment_conn1[i,"pre_dmpfc_left_tpj"] <- cor_ea1_z[[i]][1,3] 
+  ment_conn1[i,"pre_dmpfc_right_tpj"] <- cor_ea1_z[[i]][1,4] 
+  ment_conn1[i,"pre_dmpfc_ment_mean"] <- mean(cor_ea1_z[[i]][1,2:4]) 
+  ment_conn1[i,"pre_mentalizing"] <- mean(cor_ea1_z[[i]][1:4,1:4][upper.tri(cor_ea1_z[[i]][1:4,1:4], diag=F)])
+  ment_conn1[i,"pre_dmpfc_left_premotor"] <- cor_ea1_z[[i]][1,5]
+  ment_conn1[i,"pre_dmpfc_right_premotor"] <- cor_ea1_z[[i]][1,6] 
+  ment_conn1[i,"pre_dmpfc_left_ips"] <- cor_ea1_z[[i]][1,7]
+  ment_conn1[i,"pre_dmpfc_right_ips"] <- cor_ea1_z[[i]][1,8]
+  ment_conn1[i,"pre_dmpfc_sim_mean"] <- mean(cor_ea1_z[[i]][1,5:8])
+  ment_conn1[i,"pre_simulation"] <- mean(cor_ea1_z[[i]][5:8,5:8][upper.tri(cor_ea1_z[[i]][5:8,5:8], diag=F)])
+  ment_conn1[i,"pre_ment_sim"] <- mean(cor_ea1_z[[i]][1:4,5:8]) 
+}
+
+ment_conn1$record_id <- rownames(ment_conn1)
+ment_conn1 <- ment_conn1[,c(13,1:12)]
+  
+```
+
+```{r}
+# generate ses 02 correlation matrices for each participant
+cor_ea2  <- lapply(ea_resid_ts2, cor)
+
+# fisher z transform corrs to normalize dist
+cor_ea2_z  <- lapply(cor_ea2, fisherz)
+
+# add ROI names and replace inf values with 0 
+for (i in names(cor_ea2_z)) {
+  colnames(cor_ea2_z[[i]]) <- as.vector(rois)
+  rownames(cor_ea2_z[[i]]) <- as.vector(rois)
+  cor_ea2_z[[i]][is.infinite(cor_ea2_z[[i]])] <- 0
+}
+
+# generate df with dmpfc to other ROIs, and mean within network conn for each participant (across the four ROIs)
+ment_conn2 <- data.frame()
+for (i in names(cor_ea2_z)) {
+  ment_conn2[i,"post_dmpfc_precuneus"] <- cor_ea2_z[[i]][1,2]
+  ment_conn2[i,"post_dmpfc_left_tpj"] <- cor_ea2_z[[i]][1,3] 
+  ment_conn2[i,"post_dmpfc_right_tpj"] <- cor_ea2_z[[i]][1,4] 
+  ment_conn2[i,"post_dmpfc_ment_mean"] <- mean(cor_ea2_z[[i]][1,2:4]) 
+  ment_conn2[i,"post_mentalizing"] <- mean(cor_ea2_z[[i]][1:4,1:4][upper.tri(cor_ea2_z[[i]][1:4,1:4], diag=F)])
+  ment_conn2[i,"post_dmpfc_left_premotor"] <- cor_ea2_z[[i]][1,5]
+  ment_conn2[i,"post_dmpfc_right_premotor"] <- cor_ea2_z[[i]][1,6] 
+  ment_conn2[i,"post_dmpfc_left_ips"] <- cor_ea2_z[[i]][1,7]
+  ment_conn2[i,"post_dmpfc_right_ips"] <- cor_ea2_z[[i]][1,8]
+  ment_conn2[i,"post_dmpfc_sim_mean"] <- mean(cor_ea2_z[[i]][1,5:8])
+  ment_conn2[i,"post_simulation"] <- mean(cor_ea2_z[[i]][5:8,5:8][upper.tri(cor_ea2_z[[i]][5:8,5:8], diag=F)])
+  ment_conn2[i,"post_ment_sim"] <- mean(cor_ea2_z[[i]][1:4,5:8]) 
+}
+
+ment_conn2$record_id <- rownames(ment_conn2)
+ment_conn2 <- ment_conn2[,c(13,1:12)]
+
+# merge pre and post conn data
+ment_conn <- merge(ment_conn1, ment_conn2, by="record_id")
+
+# merge behav and conn data
+mod_data_conn <- merge(mod_data_behav, ment_conn, by="record_id")
+
+# write out csv
+#write.csv(mod_data_conn, '/projects/loliver/ModSoCCS/data/behavioural/modsoccs_behav_conn_data_07-22-2025.csv', row.names = FALSE)
+
+```
+
+```{r}
+# generate conn difference scores (post-pre)
+mod_data_conn$diff_dmpfc_precuneus <- mod_data_conn$post_dmpfc_precuneus-mod_data_conn$pre_dmpfc_precuneus
+mod_data_conn$diff_dmpfc_left_tpj <- mod_data_conn$post_dmpfc_left_tpj-mod_data_conn$pre_dmpfc_left_tpj
+mod_data_conn$diff_dmpfc_right_tpj <- mod_data_conn$post_dmpfc_right_tpj-mod_data_conn$pre_dmpfc_right_tpj
+mod_data_conn$diff_dmpfc_ment_mean <- mod_data_conn$post_dmpfc_ment_mean-mod_data_conn$pre_dmpfc_ment_mean
+mod_data_conn$diff_mentalizing <- mod_data_conn$post_mentalizing-mod_data_conn$pre_mentalizing
+
+mod_data_conn$diff_dmpfc_left_premotor <- mod_data_conn$post_dmpfc_left_premotor-mod_data_conn$pre_dmpfc_left_premotor
+mod_data_conn$diff_dmpfc_right_premotor <- mod_data_conn$post_dmpfc_right_premotor-mod_data_conn$pre_dmpfc_right_premotor
+mod_data_conn$diff_dmpfc_left_ips <- mod_data_conn$post_dmpfc_left_ips-mod_data_conn$pre_dmpfc_left_ips
+mod_data_conn$diff_dmpfc_right_ips <- mod_data_conn$post_dmpfc_right_ips-mod_data_conn$pre_dmpfc_right_ips
+mod_data_conn$diff_dmpfc_sim_mean <- mod_data_conn$post_dmpfc_sim_mean-mod_data_conn$pre_dmpfc_sim_mean
+mod_data_conn$diff_simulation <- mod_data_conn$post_simulation-mod_data_conn$pre_simulation
+
+mod_data_conn$diff_ment_sim <- mod_data_conn$post_ment_sim-mod_data_conn$pre_ment_sim
+
+```
+
+```{r, fig.height=8, fig.width=11}
+# check out distributions and check for outliers 
+library(reshape2)
+
+# melt conn data
+mod_data_melt <- melt(mod_data_conn[,c(1,234,277:288)])
+
+# plots
+ggplot(data = mod_data_melt, mapping = aes(x = value)) + 
+  geom_histogram(bins = 10) + facet_wrap(~variable, scales = 'free_x')
+
+# shapiro-wilks
+sapply(mod_data_conn[,c(277:288)], shapiro.test)
+
+```
+
+```{r}
+# check for outliers 
+outfunc <- function(x) {abs(scale(x)) > 3}
+
+outlist <- list()
+
+for (i in colnames(mod_data_conn[,c(277:288)])) {
+  outlist[[i]] <-
+    as.vector(mod_data_conn[which(outfunc(mod_data_conn[[i]])),1])
+} # 1 to see IDs; i to see values
+
+print(outlist)
+
+
+# remove outliers with 3 SD criteria 
+for (i in names(outlist)) {
+  mod_data_conn[mod_data_conn$record_id %in% outlist[[i]], i] <- NA
+}
+
+# change pre and post values to NAs too, for conn table and spaghetti plots
+mod_data_conn[mod_data_conn$record_id == "SPN20_MRP_0002", c("pre_dmpfc_left_tpj","post_dmpfc_left_tpj","pre_dmpfc_right_tpj","post_dmpfc_right_tpj","pre_dmpfc_ment_mean","post_dmpfc_ment_mean","pre_mentalizing","post_mentalizing","pre_dmpfc_right_ips","post_dmpfc_right_ips")] <- NA
+
+ment_conn1[ment_conn1$record_id == "SPN20_MRP_0002", c("pre_dmpfc_left_tpj","pre_dmpfc_right_tpj","pre_dmpfc_ment_mean","pre_mentalizing","pre_dmpfc_right_ips")] <- NA
+
+ment_conn2[ment_conn2$record_id == "SPN20_MRP_0002", c("post_dmpfc_left_tpj","post_dmpfc_right_tpj","post_dmpfc_ment_mean","post_mentalizing","post_dmpfc_right_ips")] <- NA
+
+```
+
+```{r, fig.height=8, fig.width=11}
+# check out distributions after outlier removal
+
+# melt conn data
+mod_data_melt <- melt(mod_data_conn[,c(1,234,277:288)])
+
+# plots
+ggplot(data = mod_data_melt, mapping = aes(x = value)) + 
+  geom_histogram(bins = 10) + facet_wrap(~variable, scales = 'free_x')
+
+# shapiro-wilks
+sapply(mod_data_conn[,c(277:288)], shapiro.test)
+
+```
+
+```{r Primary analyses FC - change}
+# primary analyses - linear models 
+for (i in colnames(mod_data_conn[,277:288])) {
+  print(i)
+  assign(paste0("lm_",i), lm(get(i) ~ Label + days_since_treat, 
+  data = mod_data_conn)) %>% summary() %>% print()
+}
+
+# with covariates
+for (i in colnames(mod_data_conn[,277:288])) {
+  print(i)
+  assign(paste0("lmcov_",i), lm(get(i) ~ Label + demo_sex_birth + demo_age_study_entry + site + days_since_treat,  
+  data = mod_data_conn)) %>% summary() %>% print()
+}
+
+```
+
+```{r}
+# post hoc and effect size comparisons 
+library(emmeans)
+library(effectsize)
+
+# DMPFC-precuneus
+# post-hoc comparisons 
+em_dmpfc_precuneus <- emmeans(lmcov_diff_dmpfc_precuneus, ~ Label)
+
+# Compare each treatment to sham only
+pw_dmpfc_precuneus <- contrast(em_dmpfc_precuneus, method = "trt.vs.ctrl", ref = "Sham", adjust = "fdr")
+
+# effect size
+eff_size(em_dmpfc_precuneus, sigma = sigma(lmcov_diff_dmpfc_precuneus), edf = df.residual(lmcov_diff_dmpfc_precuneus), type = "d")
+
+
+# DMPFC-left TPJ 
+# post-hoc comparisons 
+em_dmpfc_left_tpj <- emmeans(lmcov_diff_dmpfc_left_tpj, ~ Label)
+
+# Compare each treatment to sham only
+pw_dmpfc_left_tpj <- contrast(em_dmpfc_left_tpj, method = "trt.vs.ctrl", ref = "Sham", adjust = "fdr")
+print(pw_dmpfc_left_tpj)
+
+# effect size
+eff_size(em_dmpfc_left_tpj, sigma = sigma(lmcov_diff_dmpfc_left_tpj), edf = df.residual(lmcov_diff_dmpfc_left_tpj), type = "d")
+
+
+# DMPFC-right TPJ
+# post-hoc comparisons 
+em_dmpfc_right_tpj <- emmeans(lmcov_diff_dmpfc_right_tpj, ~ Label)
+
+# Compare each treatment to sham only
+pw_dmpfc_right_tpj <- contrast(em_dmpfc_right_tpj, method = "trt.vs.ctrl", ref = "Sham", adjust = "fdr")
+print(pw_dmpfc_right_tpj)
+
+# effect size
+eff_size(em_dmpfc_right_tpj, sigma = sigma(lmcov_diff_dmpfc_right_tpj), edf = df.residual(lmcov_diff_dmpfc_right_tpj), type = "d")
+
+
+# DMPFC-mentalizing mean
+em_dmpfc_ment_mean <- emmeans(lmcov_diff_dmpfc_ment_mean, ~ Label)
+
+pw_dmpfc_ment_mean <- contrast(em_dmpfc_ment_mean, method = "trt.vs.ctrl", ref = "Sham", adjust = "fdr")
+
+eff_size(em_dmpfc_ment_mean, sigma = sigma(lmcov_diff_dmpfc_ment_mean), edf = df.residual(lmcov_diff_dmpfc_ment_mean), type = "d")
+
+
+# mentalizing mean
+em_mentalizing <- emmeans(lmcov_diff_mentalizing, ~ Label)
+
+pw_mentalizing <- contrast(em_mentalizing, method = "trt.vs.ctrl", ref = "Sham", adjust = "fdr")
+
+eff_size(em_mentalizing, sigma = sigma(lmcov_diff_mentalizing), edf = df.residual(lmcov_diff_mentalizing), type = "d")
+
+
+# DMPFC-left premotor
+em_dmpfc_left_premotor <- emmeans(lmcov_diff_dmpfc_left_premotor, ~ Label)
+
+pw_dmpfc_left_premotor <- contrast(em_dmpfc_left_premotor, method = "trt.vs.ctrl", ref = "Sham", adjust = "fdr")
+print(pw_dmpfc_left_premotor)
+
+eff_size(em_dmpfc_left_premotor, sigma = sigma(lmcov_diff_dmpfc_left_premotor), edf = df.residual(lmcov_diff_dmpfc_left_premotor), type = "d")
+
+
+# DMPFC-right premotor
+em_dmpfc_right_premotor <- emmeans(lmcov_diff_dmpfc_right_premotor, ~ Label)
+
+pw_dmpfc_right_premotor <- contrast(em_dmpfc_right_premotor, method = "trt.vs.ctrl", ref = "Sham", adjust = "fdr")
+print(pw_dmpfc_right_premotor)
+
+eff_size(em_dmpfc_right_premotor, sigma = sigma(lmcov_diff_dmpfc_right_premotor), edf = df.residual(lmcov_diff_dmpfc_right_premotor), type = "d")
+
+```
+
+```{r Primary FC box plots, fig.height=4, fig.width=4}
+# box plots for change in conn by treatment group 
+
+ggplot(mod_data_conn,aes(x=Label,y=diff_dmpfc_left_tpj,fill=Label)) + 
+  geom_boxplot() + scale_fill_brewer(palette="BuPu") +
+  geom_jitter(size=1.4,alpha=0.5) + #aes(colour = Label), 
+  #geom_point(shape = 21)+
+  ggtitle("DMPFC-left TPJ Connectivity Change") +
+  ylab("Post - Pre-treatment Connectivity") +
+  xlab("Treatment Group") +
+  theme_bw() +
+  theme(legend.position = "none",
+        axis.text=element_text(size=12),
+        axis.title=element_text(size=14)) #face="bold"
+
+ggplot(mod_data_conn,aes(x=Label,y=diff_dmpfc_right_tpj,fill=Label)) + 
+  geom_boxplot() + scale_fill_brewer(palette="BuPu") +
+  geom_jitter(size=1.4,alpha=0.5) + #aes(colour = Label), 
+  #geom_point(shape = 21)+
+  ggtitle("DMPFC-right TPJ Connectivity Change") +
+  ylab("Post - Pre-treatment Connectivity") +
+  xlab("Treatment Group") +
+  theme_bw() +
+  theme(legend.position = "none",
+        axis.text=element_text(size=12),
+        axis.title=element_text(size=14)) #face="bold"
+
+ggplot(mod_data_conn,aes(x=Label,y=diff_dmpfc_left_premotor,fill=Label)) + 
+  geom_boxplot() + scale_fill_brewer(palette="BuPu") +
+  geom_jitter(size=1.4,alpha=0.5) + #aes(colour = Label), 
+  #geom_point(shape = 21)+
+  ggtitle("DMPFC-left IFC Connectivity Change") +
+  ylab("Post - Pre-treatment Connectivity") +
+  xlab("Treatment Group") +
+  theme_bw() +
+  theme(legend.position = "none",
+        axis.text=element_text(size=12),
+        axis.title=element_text(size=14)) #face="bold"
+ 
+ggplot(mod_data_conn,aes(x=Label,y=diff_dmpfc_right_premotor,fill=Label)) + 
+  geom_boxplot() + scale_fill_brewer(palette="BuPu") +
+  geom_jitter(size=1.4,alpha=0.5) + #aes(colour = Label), 
+  #geom_point(shape = 21)+
+  ggtitle("DMPFC-right IFC Connectivity Change") +
+  ylab("Post - Pre-treatment Connectivity") +
+  xlab("Treatment Group") +
+  theme_bw() +
+  theme(legend.position = "none",
+        axis.text=element_text(size=12),
+        axis.title=element_text(size=14)) #face="bold"
+
+# old 
+  ggplot(mod_data_conn,aes(x=Label,y=diff_dmpfc_right_premotor,fill=Label)) +
+     geom_boxplot(alpha = 0.8) + scale_fill_brewer(palette="BuPu") +
+     geom_dotplot(binaxis = 'y', stackdir = 'center', alpha = 1, dotsize=.5) +
+     #geom_point(shape = 21)+
+     ggtitle("DMPFC-right Premotor Connectivity Change") +
+     ylab("Post - Pre-treatment Connectivity") +
+     xlab("Treatment Group") +
+     theme_bw() +
+     theme(legend.position = "none",
+        axis.text=element_text(size=12),
+        axis.title=element_text(size=14))
+
+```
+
+```{r}
+# generate Table 1 ITT - demographics 
+mod_demo_ITT <- mod_data_ITT[,c(1:2,232,6,10,13:21,30:37,90,105,100,107,112)]
+mod_demo_ITT$demo_race_white <- as.factor(rowSums(mod_demo_ITT[,c("demo_race_ca___1_white","demo_race_us___1_white")]))
+mod_demo_ITT$demo_race_black <- as.factor(rowSums(mod_demo_ITT[,c("demo_race_ca___2_black","demo_race_us___2_black")]))
+mod_demo_ITT$demo_race_asian <- as.factor(rowSums(mod_demo_ITT[,c("demo_race_ca___3_asian","demo_race_us___3_asian")]))
+mod_demo_ITT$demo_race_native <- as.factor(rowSums(mod_demo_ITT[,c("demo_race_ca___4_native","demo_race_us___4_native")]))
+mod_demo_ITT$demo_race_mixed <- as.factor(rowSums(mod_demo_ITT[,c("demo_race_ca___7_mixed","demo_race_us___7_mixed")]))
+mod_demo_ITT$demo_race_other <- as.factor(rowSums(mod_demo_ITT[,c("demo_race_ca___8_other","demo_race_us___6_other")]))
+mod_demo_ITT$demo_race_unknown <- as.factor(rowSums(mod_demo_ITT[,c("demo_race_ca___9_unknown","demo_race_us___8_unknown")]))
+mod_demo_ITT <- mod_demo_ITT[,c(1:5,28:34,23:27)] 
+
+# for those who endorsed mixed race, change other endorsed races to 0 so sum equals total N (just for this table)
+mod_demo_ITT[mod_demo_ITT$demo_race_mixed!=0,c("demo_race_white","demo_race_black","demo_race_asian","demo_race_native")] <- 0
+
+table_one_ITT <- CreateTableOne(strata="Label", testNonNormal = kruskal.test, testExact = fisher.test, data=mod_demo_ITT[,c(3:17)]) 
+table_one_ITT_print <- print(table_one_ITT)
+
+#write.csv(table_one_ITT_print,file="/projects/loliver/ModSoCCS/results/modsoccs_ITT_table1_demo_kw_09-07-2025.csv")
+
+# write out mod_demo_ITT
+#write.csv(mod_demo_ITT,file="/projects/loliver/ModSoCCS/results/mod_demo_ITT.csv", row.names = F)
+
+```
+
+```{r}
+# generate Table 2 - connectivity (use for baseline)
+mod_conn <- mod_data_conn[,c("record_id","site","Label","days_since_treat","pre_dmpfc_left_tpj","post_dmpfc_left_tpj","pre_dmpfc_right_tpj","post_dmpfc_right_tpj","pre_dmpfc_left_premotor","post_dmpfc_left_premotor","pre_dmpfc_right_premotor","post_dmpfc_right_premotor")] 
+
+table_two <- CreateTableOne(strata="Label", data=mod_conn[,c(3:12)])
+table_two_print <- print(table_two) 
+
+#write.csv(table_two_print,file="/projects/loliver/ModSoCCS/results/modsoccs_table2_conn_09-07-2025.csv") # probably use this as it's reflected in the main analyses
+
+#write.csv(table_two_print,file="/projects/loliver/ModSoCCS/results/modsoccs_table2_conn_woutlier_09-07-2025.csv") # all NS before and after outlier removal
+
+```
+
+```{r}
+# add diff vars and generate table with those values
+mod_conn$diff_dmpfc_left_tpj <- mod_conn$post_dmpfc_left_tpj - mod_conn$pre_dmpfc_left_tpj
+mod_conn$diff_dmpfc_right_tpj <- mod_conn$post_dmpfc_right_tpj - mod_conn$pre_dmpfc_right_tpj
+
+table_two_diff <- CreateTableOne(strata="Label", data=mod_conn[,c(3,13:14)])
+table_two_diff_print <- print(table_two_diff)
+
+```
+
+```{r}
+# merge data to plot connectivity data by time 
+ment_conn_long1 <- ment_conn1[ment_conn1$record_id %in% mod_data_conn$record_id,]
+ment_conn_long1$time <- rep("t1",nrow(mod_data_behav))
+colnames(ment_conn_long1)[2:13] <- sub("pre_", "", colnames(ment_conn_long1)[2:13])
+ment_conn_long1 <- merge(ment_conn_long1, mod_data[,c("record_id","site","Label")], by="record_id") 
+
+ment_conn_long2 <- ment_conn2[ment_conn2$record_id %in% mod_data_conn$record_id,]
+ment_conn_long2$time <- rep("t2",nrow(mod_data_behav))
+colnames(ment_conn_long2)[2:13] <- sub("post_", "", colnames(ment_conn_long2)[2:13])
+ment_conn_long2 <- merge(ment_conn_long2, mod_data[,c("record_id","site","Label")], by="record_id")
+
+ment_conn_long <- rbind(ment_conn_long1,ment_conn_long2)
+
+```
+
+```{r}
+# check out distributions by timepoint 
+# melt conn data
+ment_conn_melt <- melt(ment_conn_long)
+
+# T1
+# plot 
+ggplot(data = ment_conn_melt[ment_conn_melt$time=="t1",], mapping = aes(x = value)) + 
+  geom_histogram(bins = 10) + facet_wrap(~variable, scales = 'free_x')
+
+# shapiro-wilks
+sapply(ment_conn_long[ment_conn_long$time=="t1",c(2:13)], shapiro.test)
+
+# T2
+# plot 
+ggplot(data = ment_conn_melt[ment_conn_melt$time=="t2",], mapping = aes(x = value)) + 
+  geom_histogram(bins = 10) + facet_wrap(~variable, scales = 'free_x')
+
+# shapiro-wilks
+sapply(ment_conn_long[ment_conn_long$time=="t2",c(2:13)], shapiro.test)
+
+```
+
+```{r Primary FC spaghetti plots, fig.height=4, fig.width=6}
+# spaghetti plot DMPFC-left TPJ conn x time  
+ggplot(ment_conn_long, aes(x=time, y=dmpfc_left_tpj, colour=Label)) +    #record_id
+  geom_point(aes(colour=Label)) +    # aes(shape = PlotLabel)
+  geom_line(aes(group=record_id), alpha = 0.5) +   # color=Label #color=rep(ment_conn_diff$colour,2)
+  stat_smooth(aes(group = Label, colour=Label), method = "lm", se = TRUE, fill = "lightgrey", alpha = 0.3, size=1) +
+  stat_summary(aes(group = Label, colour=Label), geom = "point", fun = mean) + 
+  labs(x ="Time", 
+       y = "DMPFC-left TPJ Connectivity") +
+  guides(fill=FALSE, color=FALSE) +
+  facet_wrap(~Label) +
+  scale_x_discrete(expand=c(0.1, 0.1)) +  # add space between time points
+  theme_bw() +
+  theme(strip.background = element_rect(fill="white")) +
+  theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank(),text=element_text(size=15))
+
+# DMPFC-right TPJ conn x time  
+ggplot(ment_conn_long, aes(x=time, y=dmpfc_right_tpj, colour=Label)) +    #record_id
+  geom_point(aes(colour=Label)) +    # aes(shape = PlotLabel)
+  geom_line(aes(group=record_id), alpha = 0.5) +  
+  stat_smooth(aes(group = Label, colour=Label), method = "lm", se = TRUE, fill = "lightgrey", alpha = 0.3, size=1) +
+  stat_summary(aes(group = Label, colour=Label), geom = "point", fun = mean) + 
+  labs(x ="Time", 
+       y = "DMPFC-right TPJ Connectivity") +
+  guides(fill=FALSE, color=FALSE) +
+  facet_wrap(~Label) +
+  scale_x_discrete(expand=c(0.1, 0.1)) +  # add space between time points
+  theme_bw() +
+  theme(strip.background = element_rect(fill="white")) +
+  theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank(),text=element_text(size=15))
+
+# DMPFC-left premotor  
+ggplot(ment_conn_long, aes(x=time, y=dmpfc_left_premotor, colour=Label)) +    #record_id
+  geom_point(aes(colour=Label)) + 
+  geom_line(aes(group=record_id), alpha = 0.5) +
+  stat_smooth(aes(group = Label, colour=Label), method = "lm", se = TRUE, fill = "lightgrey", alpha = 0.3, size=1) +
+  stat_summary(aes(group = Label, colour=Label), geom = "point", fun = mean) + 
+  labs(x ="Time", 
+       y = "DMPFC-left IFC Connectivity") +
+  guides(fill=FALSE, color=FALSE) +
+  facet_wrap(~Label) +
+  scale_x_discrete(expand=c(0.1, 0.1)) +  # add space between time points
+  theme_bw() +
+  theme(strip.background = element_rect(fill="white")) +
+  theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank(),text=element_text(size=15))
+
+# DMPFC-right premotor  
+ggplot(ment_conn_long, aes(x=time, y=dmpfc_right_premotor, colour=Label)) +    #record_id
+  geom_point(aes(colour=Label)) +  
+  geom_line(aes(group=record_id), alpha = 0.5) +
+  stat_smooth(aes(group = Label, colour=Label), method = "lm", se = TRUE, fill = "lightgrey", alpha = 0.3, size=1) +
+  stat_summary(aes(group = Label, colour=Label), geom = "point", fun = mean) + 
+  labs(x ="Time", 
+       y = "DMPFC-right IFC Connectivity") +
+  guides(fill=FALSE, color=FALSE) +
+  facet_wrap(~Label) +
+  scale_x_discrete(expand=c(0.1, 0.1)) +  # add space between time points
+  theme_bw() +
+  theme(strip.background = element_rect(fill="white")) +
+  theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank(),text=element_text(size=15))
+
+```
+
+

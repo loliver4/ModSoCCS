@@ -1,0 +1,87 @@
+---
+title: "Modsoccs Tolerability"
+output: html_notebook
+---
+
+```{r}
+library(dplyr)
+library(tableone)
+
+```
+
+```{r}
+# read in modsoccs ITT data
+mod_demo_ITT <- read.csv("/projects/loliver/ModSoCCS/data/behavioural/mod_demo_ITT.csv") 
+mod_demo_ITT[c(2:4,6:12)] <- lapply(mod_demo_ITT[c(2:4,6:12)], as.factor)
+
+# read in Modsoccs adverse events data
+mod_ae <- read.csv("/projects/loliver/ModSoCCS/data/behavioural/modsoccs_adverse_events.csv")
+mod_ae$sae <- 0
+mod_ae[c(2:8,10)] <- lapply(mod_ae[c(2:8,10)], as.factor)
+
+# add group to get # of participants who reported AEs by group
+mod_ae <- merge(mod_ae, mod_demo_ITT[,c("record_id","Label")], by="record_id")
+mod_ae %>% count(Label)
+
+# merge ae with ITT data
+mod_ae_ITT <- merge(mod_demo_ITT,mod_ae[,c(1:8,10)],by="record_id",all=T)
+
+# change ae NAs to 0s
+mod_ae_ITT[17:24][is.na(mod_ae_ITT[,17:24])] <- 0
+
+# read in Modsoccs avg pain data
+mod_pain <- read.csv("/projects/loliver/ModSoCCS/data/behavioural/modsoccs_tx_stim_pain.csv")
+pain_all <- mod_pain %>% 
+  group_by(record_id) %>% 
+  summarise(pain_all= mean(tx_pain))
+
+pain_tx1 <- mod_pain[mod_pain$redcap_event_name=="tx1_arm_1",c("record_id","tx_pain")]
+colnames(pain_tx1)[2] <- "pain_tx1"
+
+pain_tx10 <- mod_pain[mod_pain$redcap_event_name=="tx10_arm_1",c("record_id","tx_pain")]
+colnames(pain_tx10)[2] <- "pain_tx10"
+
+# merge pain data with ae data
+library(tidyverse)
+mod_tol_ITT <- list(mod_ae_ITT, pain_all, pain_tx1, pain_tx10) %>% 
+  reduce(full_join, by='record_id')
+
+# read in Modsoccs motor threshold and stimulation intensity data
+mod_mt <- read.csv("/projects/loliver/ModSoCCS/data/behavioural/modsoccs_motor_thresh.csv")
+mt <- mod_mt[,c("record_id","mt")]
+
+mod_stim <- read.csv("/projects/loliver/ModSoCCS/data/behavioural/modsoccs_stimulation_int.csv")
+stim <- mod_stim[,c("record_id","Stim","days_until")]
+
+# merge all data
+mod_tol_ITT <- list(mod_tol_ITT, mt, stim) %>% 
+  reduce(full_join, by='record_id')
+
+# read in blinding/treatment guess data - 1 = Active, 2 = Sham
+mod_blind <- read.csv("/projects/loliver/ModSoCCS/data/behavioural/SPN20Neuromodulation_DATA_2023-01-24_tx_treatmentguess.csv")
+mod_blind$tx_active_sham <- factor(mod_blind$tx_active_sham,
+                                   levels=c(1,2), labels=c("active","sham"))
+
+# merge with other data
+mod_tol_ITT <- merge(mod_tol_ITT,mod_blind[mod_blind$record_id %in% mod_tol_ITT$record_id,c(1,3,4)],by="record_id",all=T)
+
+#write.csv(mod_tol_ITT,file="/projects/loliver/ModSoCCS/data/behavioural/mod_tol_ITT_data_09-08-2025.csv")
+
+# generate table - use ANOVAs and fisher exact tests
+table_tol <- CreateTableOne(strata="Label", testExact = fisher.test, data=mod_tol_ITT[,c(3,17:31)])
+table_tol_print <- print(table_tol, showAllLevels = TRUE)  
+
+#write.csv(table_tol_print,file="/projects/loliver/ModSoCCS/results/modsoccs_table_tol_09-08-2025.csv")
+
+```
+
+```{r}
+# follow-up pairwise comparisons 
+pairwise.t.test(mod_tol_ITT$pain_all, mod_tol_ITT$Label, p.adjust.method = "none", paired = FALSE, var.equal = FALSE)
+
+pairwise.t.test(mod_tol_ITT$pain_tx1, mod_tol_ITT$Label, p.adjust.method = "none", paired = FALSE, var.equal = FALSE)
+
+pairwise.t.test(mod_tol_ITT$pain_tx10, mod_tol_ITT$Label, p.adjust.method = "none", paired = FALSE, var.equal = FALSE)
+
+```
+

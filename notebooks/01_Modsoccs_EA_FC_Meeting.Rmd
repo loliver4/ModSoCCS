@@ -348,7 +348,7 @@ ggplot(ment_conn_long[ment_conn_long$record_id!="SPN20_ZHP_0002" & ment_conn_lon
 ```
 
 ```{r fig.height=6, fig.width=9}
-# plot mentalizing conn x time 
+# plot mentalizing conn x time by site
 ggplot(ment_conn_long[ment_conn_long$record_id!="SPN20_ZHP_0002" & ment_conn_long$record_id!="SPN20_ZHP_0008",], aes(x=time, y=mentalizing)) +  
   geom_point() +    # aes(shape = PlotLabel)
   geom_line(aes(group=record_id), alpha = 0.5) +   # color=record_id  #color=rep(ment_conn_diff$colour,2)

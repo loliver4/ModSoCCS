@@ -28,6 +28,8 @@ Project Organization
     ├── code               <- Source code for use in this project (virtual environments, bash scripts, etc.)
     
     
+
+See https://github.com/TIGRLab/BOONStim for individualized TMS targeting pipeline details. 
     
 This directory contains scripts to wrangle data and generate files needed to run the EA GLM with 2 mm smoothing, without GSR for ModSoCCS (SPN20) participants.
 

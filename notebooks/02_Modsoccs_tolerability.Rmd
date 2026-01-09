@@ -85,3 +85,16 @@ pairwise.t.test(mod_tol_ITT$pain_tx10, mod_tol_ITT$Label, p.adjust.method = "non
 
 ```
 
+```{r}
+# calculate Simple Blinding Index (Petroff et al., 2024)
+library(SBI)
+
+BlindingIndex(27,4,12,3) # N active guessing active, active guessing sham, sham guessing active, sham guessing sham
+
+# calculate separately
+BlindingIndex(15,0,12,3) # iTBS
+
+BlindingIndex(12,4,12,3) # rTMS
+
+```
+
